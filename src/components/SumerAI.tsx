@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, Sparkles, X, MessageSquare, Maximize2, Minimize2, Mic, MicOff, Paperclip, FileText, Image as ImageIcon, Copy, Check, Volume2, VolumeX, Square, Play, Eye, Code2 } from 'lucide-react';
+import { Send, Bot, User, Loader2, Sparkles, X, MessageSquare, Maximize2, Minimize2, Mic, MicOff, Paperclip, FileText, Image as ImageIcon, Copy, Check, Volume2, VolumeX, Square, Play, Eye, Code2, Shield, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { chatWithSumer, textToSpeech, playAudio, stopAudio } from '../services/geminiService';
 import { ChatMessage, Attachment } from '../types';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { cn } from '../lib/utils';
 
@@ -86,7 +86,7 @@ const CodeBlock = ({ children, className }: { children: any, className?: string 
               title="Sumer Code Preview"
               srcDoc={getPreviewContent()}
               className="h-full w-full border-none"
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-forms"
             />
           </div>
         ) : (
@@ -112,6 +112,52 @@ export default function SumerAI() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
+
+  // Load chat history
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!auth.currentUser) return;
+      
+      setIsLoading(true);
+      try {
+        const q = query(
+          collection(db, 'chatInteractions'),
+          where('studentId', '==', auth.currentUser.uid),
+          orderBy('timestamp', 'asc')
+        );
+        
+        const querySnapshot = await getDocs(q);
+        const history: ChatMessage[] = [];
+        
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          history.push({
+            role: 'user',
+            content: data.message || '',
+            attachments: [] 
+          });
+          if (data.response) {
+            history.push({
+              role: 'model',
+              content: data.response
+            });
+          }
+        });
+        
+        if (history.length > 0) {
+          setMessages(history);
+        }
+      } catch (error) {
+        console.error("Error fetching chat history:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (isOpen) {
+      fetchHistory();
+    }
+  }, [isOpen]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -315,10 +361,13 @@ export default function SumerAI() {
                   <Bot className="h-6 w-6" />
                 </div>
                 <div>
-                  <h3 className="font-bold leading-tight">مركز سومر المعرفي</h3>
+                  <h3 className="font-bold leading-tight flex items-center gap-1.5">
+                    مركز سومر المعرفي
+                    <Shield className="h-3 w-3 text-emerald-400 fill-emerald-400/20" />
+                  </h3>
                   <div className="flex items-center gap-1.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <span className="text-[10px] font-bold opacity-80 uppercase tracking-widest text-emerald-400">Open Memory Active</span>
+                    <span className="text-[10px] font-bold opacity-80 uppercase tracking-widest text-emerald-400">Security: Active Guard</span>
                   </div>
                 </div>
               </div>

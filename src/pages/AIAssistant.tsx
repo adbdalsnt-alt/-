@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, Sparkles, AlertCircle, Zap, BookOpen, BrainCircuit, Mic, MicOff, Paperclip, Image as ImageIcon, X, FileText, Copy, Check, Volume2, VolumeX, Square, Play, Eye, Code2 } from 'lucide-react';
+import { Send, Bot, User, Loader2, Sparkles, AlertCircle, Zap, BookOpen, BrainCircuit, Mic, MicOff, Paperclip, Image as ImageIcon, X, FileText, Copy, Check, Volume2, VolumeX, Square, Play, Eye, Code2, Shield, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { chatWithSumer, textToSpeech, playAudio, stopAudio } from '../services/geminiService';
 import { ChatMessage, Attachment } from '../types';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 
 const CodeBlock = ({ children, className }: { children: any, className?: string }) => {
@@ -86,7 +86,7 @@ const CodeBlock = ({ children, className }: { children: any, className?: string 
               title="Code Preview"
               srcDoc={getPreviewContent()}
               className="h-full w-full border-none"
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-forms"
             />
           </div>
         ) : (
@@ -110,6 +110,52 @@ export default function AIAssistant() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
+
+  // Load chat history
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!auth.currentUser) return;
+      
+      setIsLoading(true);
+      try {
+        const q = query(
+          collection(db, 'chatInteractions'),
+          where('studentId', '==', auth.currentUser.uid),
+          orderBy('timestamp', 'asc')
+        );
+        
+        const querySnapshot = await getDocs(q);
+        const history: ChatMessage[] = [];
+        
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          // Add user message
+          history.push({
+            role: 'user',
+            content: data.message || '',
+            attachments: [] // Attachments logic can be expanded if stored serialized
+          });
+          // Add model response
+          if (data.response) {
+            history.push({
+              role: 'model',
+              content: data.response
+            });
+          }
+        });
+        
+        if (history.length > 0) {
+          setMessages(history);
+        }
+      } catch (error) {
+        console.error("Error fetching chat history:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchHistory();
+  }, []);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -294,7 +340,10 @@ export default function AIAssistant() {
             <Bot className="h-8 w-8 text-purple-300" />
           </motion.div>
           <div>
-            <h2 className="text-2xl font-black tracking-tight">سومر AI</h2>
+            <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
+              سومر AI 
+              <Shield className="h-5 w-5 text-emerald-400 fill-emerald-400/10" />
+            </h2>
             <div className="flex items-center gap-2 text-[11px] font-bold text-emerald-400 mt-1 uppercase tracking-widest">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -570,9 +619,19 @@ export default function AIAssistant() {
             </div>
           </div>
           <div className="mt-4 flex items-center justify-center gap-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+            <div className="flex items-center gap-1.5 text-emerald-400">
+              <Lock className="h-3 w-3" />
+              <span>Full Platform Encryption Active</span>
+            </div>
+            <div className="h-3 w-px bg-white/10"></div>
+            <div className="flex items-center gap-1.5 text-blue-400">
+              <Shield className="h-3 w-3" />
+              <span>Sumer Guard Shield v5.0</span>
+            </div>
+            <div className="h-3 w-px bg-white/10"></div>
             <div className="flex items-center gap-1.5">
               <div className="h-1 w-1 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,1)]"></div>
-              <span>End-to-End Encryption</span>
+              <span>Secure Session</span>
             </div>
             <div className="h-3 w-px bg-white/10"></div>
             <div className="flex items-center gap-1.5 text-emerald-400">

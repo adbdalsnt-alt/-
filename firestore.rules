@@ -3,13 +3,31 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Default-deny catch-all
+    // 0. Default-deny catch-all
     match /{document=**} {
       allow read, write: if false;
     }
 
+    // --- Helpers ---
+    
     function isSignedIn() {
       return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      // Bootstrapped admin from runtime metadata
+      return isSignedIn() && (
+        request.auth.token.email == 'adbdalsnt@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
     }
 
     function isValidId(id) {
@@ -24,44 +42,66 @@ service cloud.firestore {
       return resource.data;
     }
 
+    // --- Validation Blueprints ---
+
     function isValidStudent(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
-             data.grade is string &&
-             data.section is string &&
-             data.examNumber is string &&
-             data.schoolName is string &&
-             data.results is map;
-    }
-
-    // Students collection
-    match /students/{studentId} {
-      allow list: if true; // Public view for results
-      allow get: if true;
-      allow create: if isSignedIn() && isValidStudent(incoming()) && incoming().createdAt == request.time;
-      allow update: if isSignedIn() && isValidStudent(incoming()) && incoming().updatedAt == request.time;
-      allow delete: if isSignedIn();
+             data.grade is string && data.grade.size() <= 100 &&
+             data.section is string && data.section.size() <= 50 &&
+             data.examNumber is string && data.examNumber.size() <= 50 &&
+             data.schoolName is string && data.schoolName.size() <= 200 &&
+             data.results is map &&
+             data.keys().hasAll(['name', 'grade', 'section', 'examNumber', 'schoolName', 'results']) &&
+             (request.method == 'CREATE' ? data.keys().size() == 7 : true);
     }
 
     function isValidInteraction(data) {
-      return (data.studentId is string) &&
-             (data.studentEmail is string || data.studentEmail == null) &&
-             (data.message is string) &&
-             (data.response is string) &&
-             (data.hasAttachments is bool) &&
+      return data.studentId == request.auth.uid &&
+             data.message is string && data.message.size() <= 5000 &&
+             data.response is string && data.response.size() <= 10000 &&
+             data.hasAttachments is bool &&
              data.timestamp == request.time &&
-             data.keys().size() == 6;
+             data.keys().hasAll(['studentId', 'message', 'response', 'hasAttachments', 'timestamp']) &&
+             data.keys().size() >= 5;
     }
 
-    // Chat interactions
+    // --- Collections ---
+
+    // Students collection (Academic Records)
+    match /students/{studentId} {
+      allow get, list: if true; // Publicly searchable by results
+      
+      allow create: if isAdmin() && 
+                    isValidStudent(incoming()) && 
+                    incoming().createdAt == request.time;
+      
+      allow update: if isAdmin() && 
+                    isValidStudent(incoming()) && 
+                    incoming().updatedAt == request.time &&
+                    incoming().createdAt == existing().createdAt; // Immutable
+      
+      allow delete: if isAdmin();
+    }
+
+    // Chat interactions (Student logs)
     match /chatInteractions/{id} {
-      allow create: if isValidInteraction(incoming());
-      allow read: if isSignedIn();
+      allow create: if isEmailVerified() && isValidInteraction(incoming());
+      allow list: if isEmailVerified() && resource.data.studentId == request.auth.uid;
+      allow get: if isEmailVerified() && (resource.data.studentId == request.auth.uid || isAdmin());
     }
 
-    // Activity logs
+    // Activity logs (Admin Audit)
     match /activities/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && 
+                    incoming().timestamp == request.time &&
+                    incoming().adminEmail == request.auth.token.email;
+    }
+
+    // System Config (Optional protection for other paths)
+    match /admins/{adminId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn();
+      allow write: if false; // Only manageable via Cloud Functions/Console
     }
   }
 }
