@@ -1,0 +1,6 @@
+{
+  "name": "نتائجنا - Nataijna",
+  "description": "تطبيق مدرسي متقدم لإدارة النتائج وتلقين الدروس بمساعدة الذكاء الاصطناعي سومر",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": []
+}

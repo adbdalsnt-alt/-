@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "Student": {
+      "title": "Student",
+      "description": "Represents a student and their academic results.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "grade": { "type": "string", "description": "The current grade level (e.g., '1st Primary', '1st Intermediate', '4th Scientific')" },
+        "section": { "type": "string", "description": "The class section/شعبه" },
+        "examNumber": { "type": "string", "description": "National/Ministerial exam number" },
+        "schoolName": { "type": "string", "description": "Name of the school" },
+        "results": {
+          "type": "object",
+          "properties": {
+            "arabic": { "type": "number" },
+            "english": { "type": "number" },
+            "islamic": { "type": "number" },
+            "math": { "type": "number" },
+            "science": { "type": "number" },
+            "socialStudies": { "type": "number" },
+            "biology": { "type": "number" },
+            "chemistry": { "type": "number" },
+            "physics": { "type": "number" },
+            "computer": { "type": "number" },
+            "kurdish": { "type": "number" },
+            "pe": { "type": "number" },
+            "art": { "type": "number" },
+            "rules": { "type": "number", "description": "قواعد (for 6th Primary)" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "grade"]
+    },
+    "ChatInteraction": {
+      "title": "Chat Interaction",
+      "description": "Logs student interactions with the AI Sumer.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "studentEmail": { "type": "string", "description": "Email of the student if logged in" },
+        "message": { "type": "string" },
+        "response": { "type": "string" },
+        "hasAttachments": { "type": "boolean" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Activity": {
+      "title": "Activity Log",
+      "description": "Logs administrative actions performed on student data.",
+      "type": "object",
+      "properties": {
+        "adminName": { "type": "string" },
+        "action": { "type": "string", "enum": ["create", "update", "delete"] },
+        "studentName": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/students": {
+      "schema": "Student",
+      "description": "Collection of student academic records."
+    },
+    "/chatInteractions": {
+      "schema": "ChatInteraction",
+      "description": "Logs student interactions and AI responses for quality monitoring."
+    },
+    "/activities": {
+      "schema": "Activity",
+      "description": "Audit log of administrative actions."
+    }
+  }
+}

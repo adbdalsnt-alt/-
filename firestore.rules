@@ -1,0 +1,67 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidStudent(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.grade is string &&
+             data.section is string &&
+             data.examNumber is string &&
+             data.schoolName is string &&
+             data.results is map;
+    }
+
+    // Students collection
+    match /students/{studentId} {
+      allow list: if true; // Public view for results
+      allow get: if true;
+      allow create: if isSignedIn() && isValidStudent(incoming()) && incoming().createdAt == request.time;
+      allow update: if isSignedIn() && isValidStudent(incoming()) && incoming().updatedAt == request.time;
+      allow delete: if isSignedIn();
+    }
+
+    function isValidInteraction(data) {
+      return (data.studentId is string) &&
+             (data.studentEmail is string || data.studentEmail == null) &&
+             (data.message is string) &&
+             (data.response is string) &&
+             (data.hasAttachments is bool) &&
+             data.timestamp == request.time &&
+             data.keys().size() == 6;
+    }
+
+    // Chat interactions
+    match /chatInteractions/{id} {
+      allow create: if isValidInteraction(incoming());
+      allow read: if isSignedIn();
+    }
+
+    // Activity logs
+    match /activities/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+    }
+  }
+}
