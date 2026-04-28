@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ChevronRight, Home, MessageSquare, ShieldCheck, LogIn, LogOut, User, Bot } from 'lucide-react';
+import { ChevronRight, Home, MessageSquare, ShieldCheck, LogIn, LogOut, User, Bot, Loader2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { auth } from '../lib/firebase';
@@ -16,12 +16,30 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return auth.onAuthStateChanged((u) => setUser(u));
   }, []);
 
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+
   const handleLogin = async () => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
+    setLoginError(null);
     try {
       const provider = new GoogleAuthProvider();
+      // Ensure we clear any existing auth promises to avoid assertion errors
       await signInWithPopup(auth, provider);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("Login Error:", err);
+      if (err.code === 'auth/popup-blocked') {
+        setLoginError('تم حظر النافذة المنبثقة. يرجى السماح بالبث المنبثق في متصفحك أو فتح الموقع في نافذة جديدة.');
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        setLoginError('هناك طلب تسجيل دخول قيد المعالجة بالفعل.');
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        setLoginError('تم إغلاق نافذة تسجيل الدخول قبل إكمال العملية.');
+      } else {
+        setLoginError('حدث خطأ أثناء تسجيل الدخول. يرجى المحاولة لاحقاً.');
+      }
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -118,13 +136,40 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
             ) : (
-              <button
-                onClick={handleLogin}
-                className="flex items-center gap-2 rounded-xl bg-blue-600/10 px-4 py-2 text-xs font-bold text-blue-400 transition-all hover:bg-blue-600/20 border border-blue-600/20 sm:text-sm"
-              >
-                <LogIn className="h-4 w-4" />
-                <span>دخول</span>
-              </button>
+              <div className="relative">
+                <button
+                  onClick={handleLogin}
+                  disabled={isLoggingIn}
+                  className="flex items-center gap-2 rounded-xl bg-blue-600/10 px-4 py-2 text-xs font-bold text-blue-400 transition-all hover:bg-blue-600/20 border border-blue-600/20 sm:text-sm disabled:opacity-50 cursor-pointer"
+                >
+                  {isLoggingIn ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
+                  <span>{isLoggingIn ? 'جاري الدخول...' : 'دخول'}</span>
+                </button>
+                
+                <AnimatePresence>
+                  {loginError && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.9 }}
+                      className="absolute top-full mt-4 flex w-64 -translate-x-1/2 left-1/2 flex-col gap-3 rounded-2xl border border-red-500/30 bg-slate-900 p-4 shadow-2xl z-[100]"
+                    >
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 shrink-0 text-red-500" />
+                        <p className="text-xs font-bold leading-relaxed text-red-200">
+                          {loginError}
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => setLoginError(null)}
+                        className="rounded-lg bg-red-500/10 py-1.5 text-[10px] font-black uppercase tracking-widest text-red-400 hover:bg-red-500/20 transition-colors"
+                      >
+                        فهمت
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             )}
           </nav>
         </div>

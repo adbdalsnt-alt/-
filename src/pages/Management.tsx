@@ -138,14 +138,19 @@ export default function Management() {
     }
 
     if (!user) {
-      alert('يجب تسجيل الدخول ببريدك الإلكتروني أولاً لتتمكن من حفظ البيانات في السحابة.');
+      if (loading) return;
+      setLoading(true);
       try {
         const provider = new GoogleAuthProvider();
         await signInWithPopup(auth, provider);
-      } catch (err) {
+      } catch (err: any) {
         console.error("Login failed:", err);
+        if (err.code === 'auth/popup-blocked') {
+          alert('تم حظر النافذة المنبثقة. يرجى السماح بالبث المنبثق أو فتح الموقع في نافذة جديدة.');
+        }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
       return;
     }
 

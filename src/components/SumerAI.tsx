@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, Sparkles, X, MessageSquare, Maximize2, Minimize2, Mic, MicOff, Paperclip, FileText, Image as ImageIcon, Copy, Check, Volume2, VolumeX, Square, Play, Eye, Code2, Shield, Lock } from 'lucide-react';
+import { Send, Bot, User, Loader2, Sparkles, X, MessageSquare, Maximize2, Minimize2, Mic, MicOff, Paperclip, FileText, Image as ImageIcon, Copy, Check, Volume2, VolumeX, Square, Play, Eye, Code2, Shield, Lock, Camera } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { chatWithSumer, textToSpeech, playAudio, stopAudio } from '../services/geminiService';
@@ -7,6 +7,7 @@ import { ChatMessage, Attachment } from '../types';
 import { collection, addDoc, serverTimestamp, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { cn } from '../lib/utils';
+import { SumerScanner } from './SumerScanner';
 
 const CodeBlock = ({ children, className }: { children: any, className?: string }) => {
   const [copied, setCopied] = useState(false);
@@ -109,6 +110,7 @@ export default function SumerAI() {
   const [voiceMode, setVoiceMode] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -269,17 +271,19 @@ export default function SumerAI() {
       const response = await chatWithSumer(messages, userMessage || 'حلل هذه المرفقات', currentAttachments);
       setMessages(prev => [...prev, { role: 'model', content: response }]);
 
-      try {
-        await addDoc(collection(db, 'chatInteractions'), {
-          studentId: auth.currentUser?.uid || 'anonymous',
-          studentEmail: auth.currentUser?.email || null,
-          message: userMessage,
-          hasAttachments: currentAttachments.length > 0,
-          response: response,
-          timestamp: serverTimestamp()
-        });
-      } catch (logError) {
-        console.error("Failed to log interaction:", logError);
+      if (auth.currentUser) {
+        try {
+          await addDoc(collection(db, 'chatInteractions'), {
+            studentId: auth.currentUser.uid,
+            studentEmail: auth.currentUser.email,
+            message: userMessage,
+            hasAttachments: currentAttachments.length > 0,
+            response: response,
+            timestamp: serverTimestamp()
+          });
+        } catch (logError) {
+          console.error("Failed to log interaction:", logError);
+        }
       }
 
       if (usedVoice) {
@@ -367,7 +371,7 @@ export default function SumerAI() {
                   </h3>
                   <div className="flex items-center gap-1.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <span className="text-[10px] font-bold opacity-80 uppercase tracking-widest text-emerald-400">Security: Active Guard</span>
+                    <span className="text-[10px] font-bold opacity-80 uppercase tracking-widest text-emerald-400">Open & Unlimited Access</span>
                   </div>
                 </div>
               </div>
@@ -554,6 +558,14 @@ export default function SumerAI() {
                         <Square className="h-3 w-3 fill-current" />
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => setIsScannerOpen(true)}
+                      className="p-2 text-slate-500 hover:text-emerald-400 transition-colors"
+                      title="الكاميرا والماسح"
+                    >
+                      <Camera className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
                 <button
@@ -569,6 +581,26 @@ export default function SumerAI() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {isScannerOpen && (
+          <SumerScanner
+            onScan={(text) => {
+              setInput(text);
+              setIsScannerOpen(false);
+            }}
+            onCapture={(base64) => {
+              const newAttachment: Attachment = {
+                name: `Sumer_Capture_${Date.now()}.jpg`,
+                mimeType: 'image/jpeg',
+                data: base64
+              };
+              setPendingAttachments(prev => [...prev, newAttachment]);
+              setIsScannerOpen(false);
+            }}
+            onClose={() => setIsScannerOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }

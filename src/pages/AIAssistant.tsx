@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, Sparkles, AlertCircle, Zap, BookOpen, BrainCircuit, Mic, MicOff, Paperclip, Image as ImageIcon, X, FileText, Copy, Check, Volume2, VolumeX, Square, Play, Eye, Code2, Shield, Lock } from 'lucide-react';
+import { Send, Bot, User, Loader2, Sparkles, AlertCircle, Zap, BookOpen, BrainCircuit, Mic, MicOff, Paperclip, Image as ImageIcon, X, FileText, Copy, Check, Volume2, VolumeX, Square, Play, Eye, Code2, Shield, Lock, Camera, QrCode } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { chatWithSumer, textToSpeech, playAudio, stopAudio } from '../services/geminiService';
 import { ChatMessage, Attachment } from '../types';
 import { collection, addDoc, serverTimestamp, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { SumerScanner } from '../components/SumerScanner';
+import { QRCodeGenerator } from '../components/QRCodeGenerator';
 
 const CodeBlock = ({ children, className }: { children: any, className?: string }) => {
   const [copied, setCopied] = useState(false);
@@ -107,6 +109,9 @@ export default function AIAssistant() {
   const [voiceMode, setVoiceMode] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [qrValue, setQrValue] = useState<string | null>(null);
+  const [qrTitle, setQrTitle] = useState<string>('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -267,18 +272,20 @@ export default function AIAssistant() {
       const response = await chatWithSumer(messages, userMessage || 'حلل هذه المرفقات', currentAttachments);
       setMessages(prev => [...prev, { role: 'model', content: response }]);
 
-      // Log interaction
-      try {
-        await addDoc(collection(db, 'chatInteractions'), {
-          studentId: auth.currentUser?.uid || 'anonymous',
-          studentEmail: auth.currentUser?.email || null,
-          message: userMessage,
-          hasAttachments: currentAttachments.length > 0,
-          response: response,
-          timestamp: serverTimestamp()
-        });
-      } catch (logError) {
-        console.error("Failed to log interaction:", logError);
+      // Log interaction - only if authenticated
+      if (auth.currentUser) {
+        try {
+          await addDoc(collection(db, 'chatInteractions'), {
+            studentId: auth.currentUser.uid,
+            studentEmail: auth.currentUser.email,
+            message: userMessage,
+            hasAttachments: currentAttachments.length > 0,
+            response: response,
+            timestamp: serverTimestamp()
+          });
+        } catch (logError) {
+          console.error("Failed to log interaction:", logError);
+        }
       }
 
       // Speak back if in voice mode
@@ -475,8 +482,19 @@ export default function AIAssistant() {
                       {msg.content}
                     </ReactMarkdown>
                   </div>
-                  <div className={`absolute bottom-[-20px] text-[9px] font-bold uppercase tracking-widest text-slate-500 ${msg.role === 'user' ? 'right-2' : 'left-2'}`}>
-                    {msg.role === 'user' ? 'Student Request' : 'Sumer Intel'}
+                  <div className={`absolute bottom-[-24px] flex items-center gap-3 text-[9px] font-bold uppercase tracking-widest text-slate-500 ${msg.role === 'user' ? 'right-2' : 'left-2'}`}>
+                    <span>{msg.role === 'user' ? 'Student Request' : 'Sumer Intel'}</span>
+                    <button
+                      onClick={() => {
+                        setQrValue(msg.content);
+                        setQrTitle(msg.role === 'user' ? 'طلب الطالب' : 'استفسار من سومر');
+                      }}
+                      className="flex items-center gap-1 hover:text-emerald-400 transition-colors"
+                      title="مشاركة كرمز QR"
+                    >
+                      <QrCode className="h-2.5 w-2.5" />
+                      <span>QR</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -546,76 +564,89 @@ export default function AIAssistant() {
             )}
           </AnimatePresence>
 
-          <div className="relative group flex items-center gap-3">
-            <div className="flex-1 relative">
+          <div className="relative group">
+            <input
+              id="chat-input"
+              type="text"
+              className="w-full rounded-[2rem] border border-white/10 bg-white/5 py-6 pl-16 pr-72 text-white outline-none transition-all focus:border-purple-500/50 focus:bg-white/10 focus:ring-4 focus:ring-purple-500/10 placeholder:text-slate-500"
+              placeholder={isRecording ? "جاري الاستماع..." : "اطلب المعرفة من سومر..."}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              disabled={isLoading}
+              autoComplete="off"
+            />
+            
+            {/* Utility Buttons (Right Side) */}
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 px-2">
               <input
-                id="chat-input"
-                type="text"
-                className="w-full rounded-[2rem] border border-white/10 bg-white/5 py-5 pl-32 pr-8 text-white outline-none transition-all focus:border-purple-500/50 focus:bg-white/10 focus:ring-4 focus:ring-purple-500/10 placeholder:text-slate-500"
-                placeholder={isRecording ? "جاري الاستماع..." : "اطلب المعرفة من سومر..."}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                disabled={isLoading}
-                autoComplete="off"
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                multiple
+                accept="image/*,.pdf,.doc,.docx,.txt"
+                className="hidden"
               />
-              
-              <div className="absolute left-3 top-2 flex items-center gap-2">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileUpload}
-                  multiple
-                  accept="image/*,.pdf,.doc,.docx,.txt"
-                  className="hidden"
-                />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/5 text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+                title="إرفاق ملف"
+              >
+                <Paperclip className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={toggleRecording}
+                className={`flex h-11 w-11 items-center justify-center rounded-full transition-all ${
+                  isRecording 
+                    ? 'bg-red-500 text-white animate-pulse' 
+                    : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+                }`}
+                title="تسجيل صلب"
+              >
+                {isRecording ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setVoiceMode(!voiceMode)}
+                className={`flex h-11 w-11 items-center justify-center rounded-full transition-all ${
+                  voiceMode 
+                    ? 'bg-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.5)]' 
+                    : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+                }`}
+                title={voiceMode ? "إيقاف الرد الصوتي" : "تفعيل الرد الصوتي"}
+              >
+                {voiceMode ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsScannerOpen(true)}
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/5 text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-400 transition-all"
+                title="الكاميرا والماسح"
+              >
+                <Camera className="h-5 w-5" />
+              </button>
+              {voiceMode && (
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex h-12 w-12 items-center justify-center rounded-full bg-white/5 text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+                  onClick={stopAudio}
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all"
+                  title="توقف الصوت"
                 >
-                  <Paperclip className="h-5 w-5" />
+                  <Square className="h-5 w-5 fill-current" />
                 </button>
-                <button
-                  type="button"
-                  onClick={toggleRecording}
-                  className={`flex h-12 w-12 items-center justify-center rounded-full transition-all ${
-                    isRecording 
-                      ? 'bg-red-500 text-white animate-pulse' 
-                      : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  {isRecording ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setVoiceMode(!voiceMode)}
-                  className={`flex h-12 w-12 items-center justify-center rounded-full transition-all ${
-                    voiceMode 
-                      ? 'bg-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.5)]' 
-                      : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
-                  }`}
-                  title={voiceMode ? "إيقاف الرد الصوتي" : "تفعيل الرد الصوتي"}
-                >
-                  {voiceMode ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
-                </button>
-                {voiceMode && (
-                  <button
-                    type="button"
-                    onClick={stopAudio}
-                    className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all"
-                    title="توقف الصوت"
-                  >
-                    <Square className="h-5 w-5 fill-current" />
-                  </button>
-                )}
-                <button
-                  type="submit"
-                  disabled={isLoading || (!input.trim() && pendingAttachments.length === 0)}
-                  className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-blue-600 text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-30 disabled:grayscale group-focus-within:shadow-[0_0_20px_rgba(168,85,247,0.4)]"
-                >
-                  <Send className="h-6 w-6" />
-                </button>
-              </div>
+              )}
+            </div>
+
+            {/* Send Button (Left Side) - Flipped for RTL-friendly UX or just preference */}
+            <div className="absolute left-2 top-1/2 -translate-y-1/2">
+              <button
+                type="submit"
+                disabled={isLoading || (!input.trim() && pendingAttachments.length === 0)}
+                className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-blue-600 text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-30 disabled:grayscale group-focus-within:shadow-[0_0_20px_rgba(168,85,247,0.4)]"
+              >
+                <Send className="h-6 w-6" />
+              </button>
             </div>
           </div>
           <div className="mt-4 flex items-center justify-center gap-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
@@ -627,6 +658,16 @@ export default function AIAssistant() {
             <div className="flex items-center gap-1.5 text-blue-400">
               <Shield className="h-3 w-3" />
               <span>Sumer Guard Shield v5.0</span>
+            </div>
+            <div className="h-3 w-px bg-white/10"></div>
+            <div className="flex items-center gap-1.5 text-emerald-400">
+              <Sparkles className="h-3 w-3" />
+              <span>Full Access Open</span>
+            </div>
+            <div className="h-3 w-px bg-white/10"></div>
+            <div className="flex items-center gap-1.5 text-amber-400">
+              <Zap className="h-3 w-3 animate-pulse" />
+              <span>Eternal Server: Online 24/7</span>
             </div>
             <div className="h-3 w-px bg-white/10"></div>
             <div className="flex items-center gap-1.5">
@@ -646,6 +687,38 @@ export default function AIAssistant() {
           </div>
         </form>
       </div>
+      {/* Camera/Scanner Modal */}
+      <AnimatePresence>
+        {isScannerOpen && (
+          <SumerScanner
+            onScan={(text) => {
+              setInput(text);
+              setIsScannerOpen(false);
+            }}
+            onCapture={(base64) => {
+              const newAttachment: Attachment = {
+                name: `Sumer_Capture_${Date.now()}.jpg`,
+                mimeType: 'image/jpeg',
+                data: base64
+              };
+              setPendingAttachments(prev => [...prev, newAttachment]);
+              setIsScannerOpen(false);
+            }}
+            onClose={() => setIsScannerOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* QR Generator Modal */}
+      <AnimatePresence>
+        {qrValue && (
+          <QRCodeGenerator
+            value={qrValue}
+            title={qrTitle}
+            onClose={() => setQrValue(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

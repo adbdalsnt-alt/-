@@ -60,6 +60,7 @@ service cloud.firestore {
              data.message is string && data.message.size() <= 5000 &&
              data.response is string && data.response.size() <= 10000 &&
              data.hasAttachments is bool &&
+             (data.studentEmail == null || (data.studentEmail is string && data.studentEmail.size() <= 200)) &&
              data.timestamp == request.time &&
              data.keys().hasAll(['studentId', 'message', 'response', 'hasAttachments', 'timestamp']) &&
              data.keys().size() >= 5;
